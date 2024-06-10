@@ -86,13 +86,6 @@ public class Account {
         return Objects.equals(owner, tmp.owner) && Objects.deepEquals(amtMap, tmp.amtMap);
     }
 
-    public boolean equalsSavedAcc(Object o) {
-        if (this == o) return true;
-        if (o == null ) return false;
-        Account tmp = (Account) o;
-        return Objects.equals(owner, tmp.getOwner()) && Objects.deepEquals(amtMap, tmp.getAmtMap());
-    }
-
     @Override
     public String toString() {
         return "Account{" +

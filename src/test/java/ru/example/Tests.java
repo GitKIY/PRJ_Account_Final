@@ -45,18 +45,18 @@ public class Tests {
     @Test
     public void testSave (){
         Account acc = new Account();
-        Account accEt = new Account();
+        Account etalon = new Account();
         Manager mng = new Manager();
         acc.setAmtMap(ECurrency.RUB,100);
         acc.setOwner("Василий Иванов");
-        accEt.setAmtMap(ECurrency.RUB,100);
-        accEt.setOwner("Василий Иванов");
-        if (!acc.equalsSavedAcc(accEt)) throw new AssertionFailedError("Ошибка теста"); // Проверим что acc соответствует accEt
+        etalon.setAmtMap(ECurrency.RUB,100);
+        etalon.setOwner("Василий Иванов");
+        Assertions.assertEquals(acc,etalon); // Проверим что acc соответствует etalon
         mng.save(acc);      // сохраняем состояние acc
         acc.undo();         // теперь откатим последнее изменение, где указывали владельца
-        if (acc.equalsSavedAcc(accEt)) throw new AssertionFailedError("Ошибка теста"); // Теперь acc не соответствует accEt
+        Assertions.assertNotEquals(acc,etalon); // Теперь acc не соответствует etalon
         mng.restore();     // теперь восстановим acc из сохранения
-        if (!acc.equalsSavedAcc(accEt)) throw new AssertionFailedError("Ошибка теста");   // Теперь они равны
+        Assertions.assertEquals(acc,etalon);   // Теперь они равны
 
     }
 }
