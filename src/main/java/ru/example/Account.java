@@ -1,102 +1,81 @@
 package ru.example;
 
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
+import java.util.*;
 
-import java.util.Arrays;
-import java.util.Objects;
-import java.util.Stack;
-
-interface IMemento {
-    String getOwner();
-    CurrAmount[] getAmtArr();
-}
-
-class AccountMemento implements IMemento {
-    private String owner;
-    private CurrAmount[] amtArr;
-
-    public AccountMemento(String o, CurrAmount[] a) {
-        this.owner = o;
-        this.amtArr = a;
+class Manager{
+    //Map<Date, List<Save> > saves;
+    Deque<Save> saves = new ArrayDeque<>();
+    public void save (Account acc){
+        saves.push(acc.save());
     }
-    @Override
-    public String getOwner(){
-        return owner;
-    }
-    @Override
-    public CurrAmount[] getAmtArr(){
-        return amtArr;
+    public void restore (){
+        saves.pop().load();
     }
 }
 
 public class Account {
-    @Getter @Setter
     private String owner;
-    private CurrAmount[] amtArr;
-    private Memory memory;
-    SaveAcc savedAcc;
-
-    {   memory = new Memory(this);
-    }
+    private final Map<ECurrency,Integer> amtMap = new HashMap<>();
+    private Deque<Command> memory = new ArrayDeque<>();
 
     public Account (){
         this.owner  = null;
-        this.amtArr = null;
-        savedAcc    = null;
+        this.amtMap.clear();
+    }
+
+    public Account (String owner){
+        setOwner (owner);
+        this.amtMap.clear();
+    }
+
+    public String getOwner() {
+        return owner;
+    }
+
+    public Map<ECurrency, Integer> getAmtMap() {
+        return amtMap;
     }
 
     public void setOwner(String owner) {
-        if (owner == null || owner == "" ) throw new IllegalArgumentException("Не указан владелец счета");
-        memory.backup();
+        if (owner == null || owner.isBlank()) throw new IllegalArgumentException("Не указан владелец счета");
+        String tmp = Account.this.owner;
+        memory.push(()->Account.this.owner=tmp);
         this.owner = owner;
     }
 
-    public void setAmtArr(ECurrency curr, int amount) {
-        if(amount<0) throw new IllegalArgumentException("Количество валюты не может быть отрицательным!");
-        memory.backup(); //
-        if (this.amtArr != null ) {
-            for (int i = 0; i < this.amtArr.length; i++) {
-                // если валюта уже есть в списке
-                if (this.amtArr[i].getCurr() == curr) {
-                    this.amtArr[i] = this.amtArr[i].setNewAmount(amount);
-                    return;
-                }
-            }
-            // Валюты нету в списке
-            CurrAmount[] res = new CurrAmount[this.amtArr.length + 1];
-            for (int j=0; j < this.amtArr.length; j++) {
-                res[j] = this.amtArr[j];
-            }
-            res[res.length-1] = new CurrAmount(curr, amount);
-            this.amtArr = res;
+    public Map<ECurrency, Integer> getCurrenc(){return new HashMap<>(amtMap);}
+
+    public void setAmtMap(ECurrency curr, int amount) {
+        if (curr == null) throw new IllegalArgumentException();
+        if (amount<0) throw new IllegalArgumentException("Количество валюты не может быть отрицательным!");
+        if (amtMap.get(curr) == null) { // добавление валюты+сумма NewValueReverse
+            memory.push(new NewValueReverse(curr));
+        } else {// замена суммы
+            int tmp= amtMap.get(curr);
+            memory.push(new ChangeValueReverse(curr));
         }
-        else {
-            CurrAmount[] res = new CurrAmount[1];
-            res[res.length-1] = new CurrAmount(curr, amount);
-            this.amtArr = res;
-        }
+        amtMap.put(curr,amount);
     }
 
-    public boolean canUndo(){
-        return memory.canUndo();
-    }
+    public Save save(){return new AccSave();}
+
     public void undo(){
-        memory.undo();
+        if (memory.isEmpty()) {throw new IllegalArgumentException("Нет данных для Отмены!");}
+        memory.pop().make();
     }
 
-    public void save (){
-        savedAcc = new SaveAcc(owner,amtArr);
-    }
+    private class AccSave implements Save {
+        private String owner=Account.this.owner;
+        private Map<ECurrency,Integer> amtArr = new HashMap<>(Account.this.amtMap);
 
-    public AccountMemento memSave (){
-        return new AccountMemento(owner,amtArr);
+        public void load (){
+            Account.this.owner = owner;
+            Account.this.amtMap.clear();
+            Account.this.amtMap.putAll(amtArr);
+        }
     }
-    public void restore (IMemento accountMemento){
-        owner = accountMemento.getOwner();
-        amtArr = accountMemento.getAmtArr();
+    public boolean canUndo(){
+        return !memory.isEmpty();
     }
 
     @Override
@@ -104,52 +83,49 @@ public class Account {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Account tmp = (Account) o;
-        return Objects.equals(owner, tmp.owner) && Objects.deepEquals(amtArr, tmp.amtArr);
+        return Objects.equals(owner, tmp.owner) && Objects.deepEquals(amtMap, tmp.amtMap);
     }
 
     public boolean equalsSavedAcc(Object o) {
         if (this == o) return true;
         if (o == null ) return false;
-        SaveAcc tmp = (SaveAcc) o;
-        return Objects.equals(owner, tmp.getOwner()) && Objects.deepEquals(amtArr, tmp.getAmtArr());
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(owner, Arrays.hashCode(amtArr));
+        Account tmp = (Account) o;
+        return Objects.equals(owner, tmp.getOwner()) && Objects.deepEquals(amtMap, tmp.getAmtMap());
     }
 
     @Override
     public String toString() {
         return "Account{" +
                 "owner='" + owner + '\'' +
-                ", amtArr=" + Arrays.toString(amtArr) +
+                ", amtMap=" + amtMap +
+                //", saves=" + saves +
                 '}';
     }
+
+    class ChangeValueReverse implements Command {
+        int tmp;
+        ECurrency curr;
+        ChangeValueReverse(ECurrency cur){
+            this.curr = cur;
+            this.tmp = amtMap.get(cur);
+        }
+        public void make() {
+            amtMap.put(curr,tmp);
+        }
+    }
+
+    class NewValueReverse implements Command{
+        ECurrency tmpCurr;
+        NewValueReverse(ECurrency cur){
+            this.tmpCurr = cur;
+        }
+        public void make() {
+            amtMap.remove(tmpCurr);
+        }
+    }
+
 }
 
-class Memory{
-    private Stack<IMemento> history;
-    private Account account;
-
-    public Memory(Account acc) {
-        this.account = acc;
-        history = new Stack<>();
-    }
-
-    public void backup(){
-        history.push(account.memSave());
-        //System.out.println(" <------- Сохраним это состояние: "+history.size());
-    }
-
-    public boolean canUndo(){
-        if (history.isEmpty()) return false;
-        return true;
-    }
-
-    public void undo(){
-        if (history.isEmpty()) {throw new IllegalArgumentException("Нет данных для Отмены!");}
-        //System.out.print(">------ Восстановим состояние из памяти: "+history.size()+" ");
-        account.restore(history.pop());
-    }
+interface Command {
+    public void make();
 }

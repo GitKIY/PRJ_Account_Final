@@ -1,2 +1,5 @@
-package ru.example;public class Save {
+package ru.example;
+
+interface Save {
+    public void load();
 }
